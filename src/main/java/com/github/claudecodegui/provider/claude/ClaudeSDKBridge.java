@@ -57,7 +57,7 @@ public class ClaudeSDKBridge extends BaseSDKBridge {
                 envConfigurator, jsonOutputExtractor
         );
         this.sessionQueryService = new ClaudeSessionQueryService(
-                LOG, gson, nodeDetector, sdkDirSupplier,
+                LOG, gson, nodeDetector, sdkDirSupplier, processManager,
                 envConfigurator, jsonOutputExtractor
         );
         this.mcpQueryService = new ClaudeMcpQueryService(

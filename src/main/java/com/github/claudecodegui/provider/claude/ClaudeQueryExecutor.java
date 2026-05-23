@@ -80,67 +80,82 @@ class ClaudeQueryExecutor {
             envConfigurator.updateProcessEnvironment(pb, node);
             pb.environment().put("CLAUDE_USE_STDIN", "true");
 
-            Process process = pb.start();
-            ClaudeBridgeUtils.writeStdin(stdinJson, process);
+            // L4 fix: register with ProcessManager so cleanupAllProcesses sees this
+            // child on IDE shutdown. Without it, a hung sync query leaked the node
+            // process for the lifetime of the IDE.
+            String channelId = "claude-query-sync-" + UUID.randomUUID();
+            Process process = null;
+            try {
+                process = pb.start();
+                processManager.registerProcess(channelId, process);
+                ClaudeBridgeUtils.writeStdin(stdinJson, process);
 
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
 
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        output.append(line).append("\n");
 
-                    if (line.contains("[JSON_START]")) {
-                        inJson = true;
-                        jsonBuffer.setLength(0);
-                        continue;
-                    }
-                    if (line.contains("[JSON_END]")) {
-                        inJson = false;
-                        continue;
-                    }
-                    if (inJson) {
-                        jsonBuffer.append(line).append("\n");
-                    }
+                        if (line.contains("[JSON_START]")) {
+                            inJson = true;
+                            jsonBuffer.setLength(0);
+                            continue;
+                        }
+                        if (line.contains("[JSON_END]")) {
+                            inJson = false;
+                            continue;
+                        }
+                        if (inJson) {
+                            jsonBuffer.append(line).append("\n");
+                        }
 
-                    if (line.contains("[Assistant]:")) {
-                        result.finalResult = line.substring(line.indexOf("[Assistant]:") + 12).trim();
+                        if (line.contains("[Assistant]:")) {
+                            result.finalResult = line.substring(line.indexOf("[Assistant]:") + 12).trim();
+                        }
                     }
                 }
-            }
 
-            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                result.success = false;
-                result.error = "Process timeout";
-                return result;
-            }
-
-            int exitCode = process.exitValue();
-            result.rawOutput = output.toString();
-
-            if (jsonBuffer.length() > 0) {
-                try {
-                    String jsonStr = jsonBuffer.toString().trim();
-                    JsonObject jsonResult = gson.fromJson(jsonStr, JsonObject.class);
-                    result.success = jsonResult.get("success").getAsBoolean();
-
-                    if (result.success) {
-                        result.messageCount = jsonResult.get("messageCount").getAsInt();
-                    } else {
-                        result.error = jsonResult.has("error")
-                                ? jsonResult.get("error").getAsString()
-                                : "Unknown error";
-                    }
-                } catch (Exception e) {
+                boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+                if (!finished) {
+                    PlatformUtils.terminateProcess(process);
                     result.success = false;
-                    result.error = "JSON parse failed: " + e.getMessage();
+                    result.error = "Process timeout";
+                    return result;
                 }
-            } else {
-                result.success = exitCode == 0;
-                if (!result.success) {
-                    result.error = "Process exit code: " + exitCode;
+
+                int exitCode = process.exitValue();
+                result.rawOutput = output.toString();
+
+                if (jsonBuffer.length() > 0) {
+                    try {
+                        String jsonStr = jsonBuffer.toString().trim();
+                        JsonObject jsonResult = gson.fromJson(jsonStr, JsonObject.class);
+                        result.success = jsonResult.get("success").getAsBoolean();
+
+                        if (result.success) {
+                            result.messageCount = jsonResult.get("messageCount").getAsInt();
+                        } else {
+                            result.error = jsonResult.has("error")
+                                    ? jsonResult.get("error").getAsString()
+                                    : "Unknown error";
+                        }
+                    } catch (Exception e) {
+                        result.success = false;
+                        result.error = "JSON parse failed: " + e.getMessage();
+                    }
+                } else {
+                    result.success = exitCode == 0;
+                    if (!result.success) {
+                        result.error = "Process exit code: " + exitCode;
+                    }
+                }
+            } finally {
+                if (process != null) {
+                    if (process.isAlive()) {
+                        PlatformUtils.terminateProcess(process);
+                    }
+                    processManager.unregisterProcess(channelId, process);
                 }
             }
         } catch (Exception e) {

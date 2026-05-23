@@ -14,6 +14,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
@@ -90,58 +91,73 @@ class ClaudeRewindService {
                 env.put("CLAUDE_USE_STDIN", "true");
                 envConfigurator.updateProcessEnvironment(pb, node);
 
-                Process process = pb.start();
-                log.info("[Rewind] Process started, PID: " + process.pid());
-
-                ClaudeBridgeUtils.writeStdin(stdinJson, process);
-
-                CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
-                    StringBuilder output = new StringBuilder();
-                    try (BufferedReader reader = new BufferedReader(
-                            new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            log.info("[Rewind] Output: " + line);
-                            output.append(line).append("\n");
-                        }
-                    } catch (Exception ignored) {
-                    }
-                    return output.toString();
-                });
-
-                boolean finished = process.waitFor(60, TimeUnit.SECONDS);
-                int exitCode;
-                if (!finished) {
-                    PlatformUtils.terminateProcess(process);
-                    exitCode = -1;
-                } else {
-                    exitCode = process.exitValue();
-                }
-                log.info("[Rewind] Process exited with code: " + exitCode);
-
-                String outputStr;
+                // L6 fix: register with ProcessManager so cleanupAllProcesses sees this child.
+                String channelId = "claude-rewind-" + UUID.randomUUID();
+                Process process = null;
+                boolean finished = false;
+                int exitCode = -1;
                 try {
-                    outputStr = outputFuture.get(5, TimeUnit.SECONDS).trim();
-                } catch (Exception e) {
-                    outputStr = "";
-                }
+                    process = pb.start();
+                    processManager.registerProcess(channelId, process);
+                    log.info("[Rewind] Process started, PID: " + process.pid());
 
-                String jsonStr = outputExtractor.extractLastJsonLine(outputStr);
-                if (jsonStr != null) {
+                    ClaudeBridgeUtils.writeStdin(stdinJson, process);
+
+                    final Process finalProcess = process;
+                    CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
+                        StringBuilder output = new StringBuilder();
+                        try (BufferedReader reader = new BufferedReader(
+                                new InputStreamReader(finalProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                log.info("[Rewind] Output: " + line);
+                                output.append(line).append("\n");
+                            }
+                        } catch (Exception ignored) {
+                        }
+                        return output.toString();
+                    });
+
+                    finished = process.waitFor(60, TimeUnit.SECONDS);
+                    if (!finished) {
+                        PlatformUtils.terminateProcess(process);
+                        exitCode = -1;
+                    } else {
+                        exitCode = process.exitValue();
+                    }
+                    log.info("[Rewind] Process exited with code: " + exitCode);
+
+                    String outputStr;
                     try {
-                        return gson.fromJson(jsonStr, JsonObject.class);
+                        outputStr = outputFuture.get(5, TimeUnit.SECONDS).trim();
                     } catch (Exception e) {
-                        log.warn("[Rewind] Failed to parse JSON: " + e.getMessage());
+                        outputStr = "";
+                    }
+
+                    String jsonStr = outputExtractor.extractLastJsonLine(outputStr);
+                    if (jsonStr != null) {
+                        try {
+                            return gson.fromJson(jsonStr, JsonObject.class);
+                        } catch (Exception e) {
+                            log.warn("[Rewind] Failed to parse JSON: " + e.getMessage());
+                        }
+                    }
+
+                    response.addProperty("success", exitCode == 0);
+                    if (exitCode != 0) {
+                        response.addProperty("error", !finished
+                                ? "Rewind process timeout"
+                                : "Process exited with code: " + exitCode);
+                    }
+                    return response;
+                } finally {
+                    if (process != null) {
+                        if (process.isAlive()) {
+                            PlatformUtils.terminateProcess(process);
+                        }
+                        processManager.unregisterProcess(channelId, process);
                     }
                 }
-
-                response.addProperty("success", exitCode == 0);
-                if (exitCode != 0) {
-                    response.addProperty("error", !finished
-                            ? "Rewind process timeout"
-                            : "Process exited with code: " + exitCode);
-                }
-                return response;
             } catch (Exception e) {
                 log.error("[Rewind] Exception: " + e.getMessage(), e);
                 response.addProperty("success", false);

@@ -2,6 +2,8 @@ package com.github.claudecodegui.provider.claude;
 
 import com.github.claudecodegui.bridge.EnvironmentConfigurator;
 import com.github.claudecodegui.bridge.NodeDetector;
+import com.github.claudecodegui.bridge.ProcessManager;
+import com.github.claudecodegui.util.PlatformUtils;
 import com.github.claudecodegui.util.UserMessageSanitizer;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -18,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -39,6 +42,7 @@ class ClaudeSessionQueryService {
     private final Gson gson;
     private final NodeDetector nodeDetector;
     private final Supplier<File> sdkDirSupplier;
+    private final ProcessManager processManager;
     private final EnvironmentConfigurator envConfigurator;
     private final ClaudeJsonOutputExtractor outputExtractor;
 
@@ -47,6 +51,7 @@ class ClaudeSessionQueryService {
             Gson gson,
             NodeDetector nodeDetector,
             Supplier<File> sdkDirSupplier,
+            ProcessManager processManager,
             EnvironmentConfigurator envConfigurator,
             ClaudeJsonOutputExtractor outputExtractor
     ) {
@@ -54,6 +59,7 @@ class ClaudeSessionQueryService {
         this.gson = gson;
         this.nodeDetector = nodeDetector;
         this.sdkDirSupplier = sdkDirSupplier;
+        this.processManager = processManager;
         this.envConfigurator = envConfigurator;
         this.outputExtractor = outputExtractor;
     }
@@ -130,21 +136,34 @@ class ClaudeSessionQueryService {
         pb.redirectErrorStream(true);
         envConfigurator.updateProcessEnvironment(pb, node);
 
-        Process process = pb.start();
-
+        // L5 fix: register with ProcessManager so cleanupAllProcesses sees this child.
+        String channelId = "claude-session-query-" + UUID.randomUUID();
+        Process process = null;
         StringBuilder output = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-            }
-        }
+        try {
+            process = pb.start();
+            processManager.registerProcess(channelId, process);
 
-        boolean finished = process.waitFor(PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        if (!finished) {
-            process.destroyForcibly();
-            throw new RuntimeException("Node.js process timed out after " + PROCESS_TIMEOUT_SECONDS + " seconds");
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+            }
+
+            boolean finished = process.waitFor(PROCESS_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (!finished) {
+                PlatformUtils.terminateProcess(process);
+                throw new RuntimeException("Node.js process timed out after " + PROCESS_TIMEOUT_SECONDS + " seconds");
+            }
+        } finally {
+            if (process != null) {
+                if (process.isAlive()) {
+                    PlatformUtils.terminateProcess(process);
+                }
+                processManager.unregisterProcess(channelId, process);
+            }
         }
 
         String outputStr = output.toString().trim();

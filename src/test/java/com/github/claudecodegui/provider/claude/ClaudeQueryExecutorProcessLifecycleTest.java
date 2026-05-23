@@ -182,4 +182,30 @@ public class ClaudeQueryExecutorProcessLifecycleTest {
         assertFalse("child process must not outlive the call",
                 processManager.registeredProcess.get().isAlive());
     }
+
+    // ----- L4: executeQuerySync ----------------------------------------------
+
+    @Test
+    public void executeQuerySync_registersAndUnregistersChild() throws Exception {
+        ClaudeQueryExecutor executor = newExecutor();
+
+        // 30s timeout is well over `java simple-query.js` exit-on-error duration.
+        executor.executeQuerySync("hello", 30);
+
+        // Same contract as the stream path: register before I/O, unregister in finally.
+        assertEquals("child must be registered",
+                1, processManager.registerCalls.get());
+        assertEquals("child must be unregistered in finally",
+                1, processManager.unregisterCalls.get());
+        assertEquals(processManager.lastRegisteredChannelId.get(),
+                processManager.lastUnregisteredChannelId.get());
+        assertNotNull(processManager.lastRegisteredChannelId.get());
+        assertTrue("channelId convention for the Node Process panel",
+                processManager.lastRegisteredChannelId.get()
+                        .startsWith("claude-query-sync-"));
+        assertEquals("no lingering active processes",
+                0, processManager.getActiveProcessCount());
+        assertFalse("child must not outlive the call",
+                processManager.registeredProcess.get().isAlive());
+    }
 }
