@@ -974,6 +974,46 @@ describe('useWindowCallbacks integration', () => {
       expect(window.__deniedToolIds?.has('B-1')).toBe(true);
     });
 
+    it('onStreamEnd only scans the LAST turn, leaving earlier-turn orphans alone', () => {
+      // Design contract (NOT a bug): during a LIVE stream only the active turn can
+      // have stragglers — every earlier turn already received its tool_results
+      // before the next turn began. onStreamEnd therefore uses scope='lastTurn'
+      // as a hot-path optimization (see streamingCallbacks.ts). This test pins
+      // that behavior so a future "just switch it to 'all'" change is caught:
+      // 'all' would re-scan the whole conversation on every normal turn end.
+      // Multi-turn orphan cleanup is the job of historyLoadComplete (scope='all').
+      const turnA: ClaudeMessage = {
+        type: 'assistant',
+        content: 'batch A',
+        raw: {
+          content: [
+            { type: 'tool_use', id: 'old-A', name: 'bash', input: { command: 'a' } },
+          ],
+        } as never,
+        timestamp: new Date().toISOString(),
+      };
+      // No tool_result for old-A — but it belongs to an earlier turn.
+      const turnB: ClaudeMessage = {
+        type: 'assistant',
+        content: 'batch B',
+        raw: {
+          content: [
+            { type: 'tool_use', id: 'last-B', name: 'bash', input: { command: 'b' } },
+          ],
+        } as never,
+        timestamp: new Date().toISOString(),
+      };
+      const { opts } = createOptsWithMessages([turnA, turnB]);
+      renderHook(() => useWindowCallbacks(opts));
+
+      act(() => { window.onStreamStart!(); });
+      act(() => { window.onStreamEnd!('5'); });
+
+      // last-B (most recent turn) is flagged; old-A (earlier turn) is intentionally NOT.
+      expect(window.__deniedToolIds?.has('last-B')).toBe(true);
+      expect(window.__deniedToolIds?.has('old-A')).toBe(false);
+    });
+
     it('onPermissionDenied still marks unresolved tool_use (regression guard)', () => {
       // Sanity check that refactoring onPermissionDenied to share the helper
       // did not change its observable behavior.
