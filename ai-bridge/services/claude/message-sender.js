@@ -158,6 +158,10 @@ function processStreamMessage(msg, state, logPrefix) {
         // or duplicate this turn's index-0 block (see resetTurnBlockState). Mirrors
         // stream-event-processor.js — both streaming paths must reset identically.
         resetTurnBlockState(state);
+        // Emit BLOCK_RESET — mirrors stream-event-processor.js, see there for rationale.
+        if (state.streamingEnabled) {
+          process.stdout.write('[BLOCK_RESET]\n');
+        }
         if (event.message?.usage) {
           // IMPORTANT: Must use mergeUsage(state.accumulatedUsage, ...) to accumulate across turns.
           // Using mergeUsage(null, ...) would reset and only show the last turn's usage.
