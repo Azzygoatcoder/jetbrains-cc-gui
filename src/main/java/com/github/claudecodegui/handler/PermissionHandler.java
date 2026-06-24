@@ -59,7 +59,7 @@ public class PermissionHandler extends BaseMessageHandler {
     private final SafetyNetScheduler safetyNetScheduler;
 
     // Permission request map
-    private final Map<String, CompletableFuture<Integer>> pendingPermissionRequests = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<PermissionService.DialogResult>> pendingPermissionRequests = new ConcurrentHashMap<>();
 
     // AskUserQuestion request map (requestId -> CompletableFuture<JsonObject>)
     private final Map<String, CompletableFuture<JsonObject>> pendingAskUserQuestionRequests = new ConcurrentHashMap<>();
@@ -140,9 +140,9 @@ public class PermissionHandler extends BaseMessageHandler {
     /**
      * Show the frontend permission dialog.
      */
-    public CompletableFuture<Integer> showFrontendPermissionDialog(String toolName, JsonObject inputs) {
+    public CompletableFuture<PermissionService.DialogResult> showFrontendPermissionDialog(String toolName, JsonObject inputs) {
         String channelId = UUID.randomUUID().toString();
-        CompletableFuture<Integer> future = new CompletableFuture<>();
+        CompletableFuture<PermissionService.DialogResult> future = new CompletableFuture<>();
 
         LOG.info("[PERM_SHOW] showFrontendPermissionDialog called: channelId=" + channelId + ", toolName=" + toolName);
 
@@ -175,7 +175,8 @@ public class PermissionHandler extends BaseMessageHandler {
             });
 
             scheduleSafetyNet(future, () -> {
-                if (future.complete(PermissionService.PermissionResponse.DENY.getValue())) {
+                if (future.complete(new PermissionService.DialogResult(
+                        PermissionService.PermissionResponse.DENY.getValue(), null))) {
                     LOG.warn("[PERM_SHOW] Safety-net timeout fired (webview unreachable) for channelId=" + channelId);
                     pendingPermissionRequests.remove(channelId);
                 }
@@ -184,7 +185,8 @@ public class PermissionHandler extends BaseMessageHandler {
         } catch (Exception e) {
             LOG.error("[PERM_SHOW] ERROR: errorClass=" + errorClass(e), e);
             pendingPermissionRequests.remove(channelId);
-            future.complete(PermissionService.PermissionResponse.DENY.getValue());
+            future.complete(new PermissionService.DialogResult(
+                    PermissionService.PermissionResponse.DENY.getValue(), null));
         }
 
         return future;
@@ -276,7 +278,7 @@ public class PermissionHandler extends BaseMessageHandler {
             LOG.info("[PERM_DECISION] channelId=" + channelId + ", allow=" + allow + ", remember=" + remember);
             LOG.info("[PERM_DECISION] pendingPermissionRequests size before remove: " + pendingPermissionRequests.size());
 
-            CompletableFuture<Integer> pendingFuture = pendingPermissionRequests.remove(channelId);
+            CompletableFuture<PermissionService.DialogResult> pendingFuture = pendingPermissionRequests.remove(channelId);
 
             if (pendingFuture != null) {
                 LOG.info("[PERM_DECISION] Found pending future, completing with allow=" + allow);
@@ -288,7 +290,7 @@ public class PermissionHandler extends BaseMessageHandler {
                 } else {
                     responseValue = PermissionService.PermissionResponse.DENY.getValue();
                 }
-                pendingFuture.complete(responseValue);
+                pendingFuture.complete(new PermissionService.DialogResult(responseValue, rejectMessage));
                 LOG.info("[PERM_DECISION] Future completed with value=" + responseValue);
 
                 if (!allow) {
@@ -333,8 +335,9 @@ public class PermissionHandler extends BaseMessageHandler {
         int planCount = pendingPlanApprovalRequests.size();
 
         // Cancel all pending permission requests
-        for (Map.Entry<String, CompletableFuture<Integer>> entry : pendingPermissionRequests.entrySet()) {
-            entry.getValue().complete(PermissionService.PermissionResponse.DENY.getValue());
+        for (Map.Entry<String, CompletableFuture<PermissionService.DialogResult>> entry : pendingPermissionRequests.entrySet()) {
+            entry.getValue().complete(new PermissionService.DialogResult(
+                    PermissionService.PermissionResponse.DENY.getValue(), null));
         }
         pendingPermissionRequests.clear();
 

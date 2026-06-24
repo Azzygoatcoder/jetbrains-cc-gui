@@ -92,12 +92,29 @@ public class PermissionService {
         }
     }
 
+    /**
+     * Carries both the permission response value and an optional user-provided
+     * rejection message from the webview dialog.
+     */
+    public static class DialogResult {
+        private final int responseValue;
+        private final String rejectMessage;
+
+        public DialogResult(int responseValue, String rejectMessage) {
+            this.responseValue = responseValue;
+            this.rejectMessage = rejectMessage;
+        }
+
+        public int getResponseValue() { return responseValue; }
+        public String getRejectMessage() { return rejectMessage; }
+    }
+
     public interface PermissionDecisionListener {
         void onDecision(PermissionDecision decision);
     }
 
     public interface PermissionDialogShower {
-        CompletableFuture<Integer> showPermissionDialog(String toolName, JsonObject inputs);
+        CompletableFuture<DialogResult> showPermissionDialog(String toolName, JsonObject inputs);
     }
 
     public interface AskUserQuestionDialogShower {
@@ -366,18 +383,18 @@ public class PermissionService {
         processingRequests.add(fileName); // re-add: caller's finally will remove, but async needs it
         final long dialogStart = System.currentTimeMillis();
 
-        CompletableFuture<Integer> future = shower.showPermissionDialog(toolName, inputs);
-        future.thenAccept(response -> {
-            LOG.info("[PERM_FUTURE] response=" + response + ", elapsed="
+        CompletableFuture<DialogResult> future = shower.showPermissionDialog(toolName, inputs);
+        future.thenAccept(result -> {
+            LOG.info("[PERM_FUTURE] response=" + result.getResponseValue() + ", elapsed="
                     + (System.currentTimeMillis() - dialogStart) + "ms, tool=" + toolName);
             try {
-                PermissionResponse decision = resolveDecision(response);
+                PermissionResponse decision = resolveDecision(result.getResponseValue());
                 boolean allow = decision.isAllow();
                 if (decision == PermissionResponse.ALLOW_ALWAYS) {
                     decisionStore.rememberToolDecision(toolName, PermissionResponse.ALLOW_ALWAYS);
                 }
                 notifyDecision(toolName, inputs, decision);
-                fileProtocol.writePermissionResponse(requestId, allow);
+                fileProtocol.writePermissionResponse(requestId, allow, result.getRejectMessage());
             } catch (Exception e) {
                 LOG.error("[PERM_FUTURE] Error: " + e.getMessage(), e);
             } finally {

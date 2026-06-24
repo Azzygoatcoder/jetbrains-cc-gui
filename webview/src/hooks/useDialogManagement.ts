@@ -18,7 +18,7 @@ interface UseDialogManagementReturn {
   openPermissionDialog: (request: PermissionRequest) => void;
   handlePermissionApprove: (channelId: string) => void;
   handlePermissionApproveAlways: (channelId: string) => void;
-  handlePermissionSkip: (channelId: string) => void;
+  handlePermissionSkip: (channelId: string, rejectMessage?: string) => void;
 
   // AskUserQuestion dialog
   askUserQuestionDialogOpen: boolean;
@@ -238,12 +238,12 @@ export function useDialogManagement({ t }: UseDialogManagementOptions): UseDialo
     setCurrentPermissionRequest(null);
   }, []);
 
-  const handlePermissionSkip = useCallback((channelId: string) => {
+  const handlePermissionSkip = useCallback((channelId: string, rejectMessage?: string) => {
     const payload = JSON.stringify({
       channelId,
       allow: false,
       remember: false,
-      rejectMessage: t('permission.userDenied'),
+      rejectMessage: rejectMessage || t('permission.userDenied'),
     });
     sendBridgeEvent('permission_decision', payload);
     pendingPermissionRequestsRef.current = pendingPermissionRequestsRef.current.filter(
