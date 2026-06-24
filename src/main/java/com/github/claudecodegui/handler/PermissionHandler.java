@@ -505,6 +505,10 @@ public class PermissionHandler extends BaseMessageHandler {
             String requestId = response.get("requestId").getAsString();
             boolean approved = response.has("approved") && response.get("approved").getAsBoolean();
             String targetMode = response.has("targetMode") ? response.get("targetMode").getAsString() : "default";
+            String message = null;
+            if (response.has("message") && !response.get("message").isJsonNull()) {
+                message = response.get("message").getAsString();
+            }
 
             CompletableFuture<JsonObject> pendingFuture = pendingPlanApprovalRequests.remove(requestId);
 
@@ -512,6 +516,9 @@ public class PermissionHandler extends BaseMessageHandler {
                 JsonObject result = new JsonObject();
                 result.addProperty("approved", approved);
                 result.addProperty("targetMode", targetMode);
+                if (message != null && !message.isEmpty()) {
+                    result.addProperty("message", message);
+                }
                 LOG.debug("[PLAN_APPROVAL][HANDLE_RESPONSE] Completing future: approved=" + approved + ", targetMode=" + targetMode);
                 pendingFuture.complete(result);
             } else {

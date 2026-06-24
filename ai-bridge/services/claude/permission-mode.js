@@ -153,17 +153,17 @@ export function createPreToolUseHook(permissionModeState, cwd = null, onModeChan
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
-              permissionDecision: 'deny'
-            },
-            reason: result?.message || 'Plan was rejected by user'
+              permissionDecision: 'deny',
+              permissionDecisionReason: result?.message || 'Plan was rejected by user'
+            }
           };
         } catch (error) {
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
-              permissionDecision: 'deny'
-            },
-            reason: 'Plan approval failed: ' + (error?.message || String(error))
+              permissionDecision: 'deny',
+              permissionDecisionReason: 'Plan approval failed: ' + (error?.message || String(error))
+            }
           };
         }
       }
@@ -212,17 +212,17 @@ export function createPreToolUseHook(permissionModeState, cwd = null, onModeChan
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
-              permissionDecision: 'deny'
-            },
-            reason: result?.message || `Cannot edit non-plan files in plan mode. Only ${PLAN_FILE_NAME} can be edited.`
+              permissionDecision: 'deny',
+              permissionDecisionReason: result?.message || `Cannot edit non-plan files in plan mode. Only ${PLAN_FILE_NAME} can be edited.`
+            }
           };
         } catch (error) {
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
-              permissionDecision: 'deny'
-            },
-            reason: 'Permission check failed: ' + (error?.message || String(error))
+              permissionDecision: 'deny',
+              permissionDecisionReason: 'Permission check failed: ' + (error?.message || String(error))
+            }
           };
         }
       }
@@ -242,17 +242,17 @@ export function createPreToolUseHook(permissionModeState, cwd = null, onModeChan
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
-              permissionDecision: 'deny'
-            },
-            reason: result?.message || 'Permission denied'
+              permissionDecision: 'deny',
+              permissionDecisionReason: result?.message || 'Permission denied'
+            }
           };
         } catch (error) {
           return {
             hookSpecificOutput: {
               hookEventName: 'PreToolUse',
-              permissionDecision: 'deny'
-            },
-            reason: 'Permission check failed: ' + (error?.message || String(error))
+              permissionDecision: 'deny',
+              permissionDecisionReason: 'Permission check failed: ' + (error?.message || String(error))
+            }
           };
         }
       }
@@ -271,9 +271,9 @@ export function createPreToolUseHook(permissionModeState, cwd = null, onModeChan
       return {
         hookSpecificOutput: {
           hookEventName: 'PreToolUse',
-          permissionDecision: 'deny'
-        },
-        reason: `Tool "${toolName}" is not allowed in plan mode. Only read-only tools are permitted.`
+          permissionDecision: 'deny',
+          permissionDecisionReason: `Tool "${toolName}" is not allowed in plan mode. Only read-only tools are permitted.`
+        }
       };
     }
 

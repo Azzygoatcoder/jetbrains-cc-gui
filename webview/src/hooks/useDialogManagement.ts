@@ -32,7 +32,7 @@ interface UseDialogManagementReturn {
   currentPlanApprovalRequest: PlanApprovalRequest | null;
   openPlanApprovalDialog: (request: PlanApprovalRequest) => void;
   handlePlanApprovalApprove: (requestId: string, targetMode: string) => void;
-  handlePlanApprovalReject: (requestId: string) => void;
+  handlePlanApprovalReject: (requestId: string, rejectMessage?: string) => void;
 
   // Rewind dialog
   rewindDialogOpen: boolean;
@@ -294,11 +294,12 @@ export function useDialogManagement({ t }: UseDialogManagementOptions): UseDialo
     setCurrentPlanApprovalRequest(null);
   }, []);
 
-  const handlePlanApprovalReject = useCallback((requestId: string) => {
+  const handlePlanApprovalReject = useCallback((requestId: string, rejectMessage?: string) => {
     const payload = JSON.stringify({
       requestId,
       approved: false,
       targetMode: 'default',
+      message: rejectMessage || null,
     });
     sendBridgeEvent('plan_approval_response', payload);
     planApprovalDialogOpenRef.current = false;
