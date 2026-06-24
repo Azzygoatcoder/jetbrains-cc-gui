@@ -95,9 +95,16 @@ class PermissionFileProtocol {
     }
 
     void writePermissionResponse(String requestId, boolean allow) {
+        writePermissionResponse(requestId, allow, null);
+    }
+
+    void writePermissionResponse(String requestId, boolean allow, String rejectMessage) {
         LOG.info("[PERM_WRITE] Writing response for requestId=" + requestId + ", allow=" + allow);
         JsonObject response = new JsonObject();
         response.addProperty("allow", allow);
+        if (rejectMessage != null && !rejectMessage.isEmpty()) {
+            response.addProperty("rejectMessage", rejectMessage);
+        }
         writeJson(resolveResponsePath(RESPONSE_FILE_PREFIX, requestId), response, "RESPONSE");
     }
 
