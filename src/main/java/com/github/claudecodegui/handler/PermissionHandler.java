@@ -322,10 +322,11 @@ public class PermissionHandler extends BaseMessageHandler {
                 }
                 pendingFuture.complete(new PermissionService.DialogResult(responseValue, rejectMessage));
                 LOG.info("[PERM_DECISION] Future completed with value=" + responseValue);
-
-                if (!allow) {
-                    notifyPermissionDenied();
-                }
+                // Do NOT call notifyPermissionDenied() here — the deny result
+                // (including custom rejectMessage) is already communicated back to
+                // Claude SDK via the file IPC protocol. Interrupting the session at
+                // this point would kill the process before Claude can receive the
+                // feedback and adapt (e.g., rewrite a plan).
             } else {
                 LOG.warn("[PERM_DECISION] No pending future found for channelId=" + channelId + ", falling back to session handler");
                 LOG.warn("[PERM_DECISION] Current pendingPermissionRequests keys: " + pendingPermissionRequests.keySet());
