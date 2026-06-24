@@ -115,9 +115,16 @@ class PermissionFileProtocol {
     }
 
     void writePlanApprovalResponse(String requestId, boolean approved, String targetMode) {
+        writePlanApprovalResponse(requestId, approved, targetMode, null);
+    }
+
+    void writePlanApprovalResponse(String requestId, boolean approved, String targetMode, String message) {
         JsonObject response = new JsonObject();
         response.addProperty("approved", approved);
         response.addProperty("targetMode", targetMode);
+        if (message != null && !message.isEmpty()) {
+            response.addProperty("message", message);
+        }
         writeJson(resolveResponsePath(PLAN_APPROVAL_RESPONSE_FILE_PREFIX, requestId), response, "PLAN_RESPONSE");
     }
 

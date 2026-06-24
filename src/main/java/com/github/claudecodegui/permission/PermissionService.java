@@ -581,7 +581,11 @@ public class PermissionService {
             try {
                 boolean approved = response.has("approved") && response.get("approved").getAsBoolean();
                 String targetMode = response.has("targetMode") ? response.get("targetMode").getAsString() : "default";
-                fileProtocol.writePlanApprovalResponse(requestId, approved, targetMode);
+                String message = null;
+                if (response.has("message") && !response.get("message").isJsonNull()) {
+                    message = response.get("message").getAsString();
+                }
+                fileProtocol.writePlanApprovalResponse(requestId, approved, targetMode, message);
             } catch (Exception e) {
                 LOG.error("Error occurred", e);
                 fileProtocol.writePlanApprovalResponse(requestId, false, "default");
