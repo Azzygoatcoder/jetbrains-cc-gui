@@ -150,8 +150,8 @@ describe('PlanApprovalDialog countdown', () => {
       />,
     );
 
-    fireEvent.click(screen.getByText('批准'));
-    fireEvent.click(screen.getByText('确认执行'));
+    fireEvent.click(screen.getByRole('button', { name: '批准' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onApprove).toHaveBeenCalledWith('plan-test-1', 'default');
 
