@@ -415,10 +415,10 @@ export async function requestPermissionFromJava(toolName, input) {
       responseFileExists: respFileExists
     });
 
-    return false;
+    return { allowed: false, rejectMessage: undefined };
 
   } catch (error) {
     debugLog('FATAL_ERROR', `Unexpected error in requestPermissionFromJava: ${errorClass(error)}`);
-    return false;
+    return { allowed: false, rejectMessage: undefined };
   }
 }
