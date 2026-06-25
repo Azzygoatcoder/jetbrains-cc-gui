@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PlanApprovalDialog, { type PlanApprovalRequest } from './PlanApprovalDialog';
 import { resetLinkifyCapabilities, setLinkifyCapabilities } from '../utils/linkifyCapabilities';
@@ -133,7 +133,7 @@ describe('PlanApprovalDialog countdown', () => {
     expect(onReject).not.toHaveBeenCalled();
   });
 
-  it('approve click suppresses the auto-reject that would otherwise fire after timeout', async () => {
+  it('approve click suppresses the auto-reject that would otherwise fire after timeout', () => {
     // Critical race: user clicks "approve" near the deadline, timer expires
     // moments later. The backend must not receive both approve and reject
     // for the same plan.
@@ -150,10 +150,9 @@ describe('PlanApprovalDialog countdown', () => {
       />,
     );
 
+    // Two-step approval: first click enters mode selection, second confirms.
     fireEvent.click(screen.getByRole('button', { name: '批准' }));
-    await waitFor(() => {
-      screen.getByRole('button', { name: '确认执行' });
-    });
+    act(() => { vi.runAllTimers(); });
     fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onApprove).toHaveBeenCalledWith('plan-test-1', 'default');
