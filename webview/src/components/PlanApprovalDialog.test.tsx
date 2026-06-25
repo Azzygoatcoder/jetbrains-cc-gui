@@ -151,11 +151,14 @@ describe('PlanApprovalDialog countdown', () => {
     );
 
     // Two-step approval: first click enters mode selection, second confirms.
+    // Use real timers for the interaction so React state updates propagate,
+    // then switch back to fake timers for the timeout race check.
+    vi.useRealTimers();
     fireEvent.click(screen.getByRole('button', { name: '批准' }));
-    act(() => { vi.runAllTimers(); });
     fireEvent.click(screen.getByRole('button', { name: '确认执行' }));
     expect(onApprove).toHaveBeenCalledTimes(1);
     expect(onApprove).toHaveBeenCalledWith('plan-test-1', 'default');
+    vi.useFakeTimers();
 
     act(() => {
       vi.advanceTimersByTime(60_000);
